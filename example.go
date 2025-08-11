@@ -1,16 +1,19 @@
 package main
 
 import (
-  "net/http"
   "fmt"
+  "net/http"
   "math/rand"
   "github.com/gin-gonic/gin"
   "log"
-  "liam/utils"
   "os"
   "mime/multipart"
   "github.com/aliyun/aliyun-oss-go-sdk/oss"
   "github.com/joho/godotenv"
+  
+
+  "liam/utils"
+  "liam/controller/upload"
 )
 
 func saveToAliyunOSS(file *multipart.FileHeader, bucketName, objectName string) error {
@@ -54,8 +57,9 @@ func main() {
   if err != nil {
       log.Fatalf("Error loading .env file: %v", err)
   }
-  r := gin.Default()
+  // gin.DisableConsoleColor()
 
+  r := gin.Default()
   r.POST("/public/login", loginEndpoint)
 
   authorized := r.Group("/")
@@ -63,11 +67,19 @@ func main() {
   {
     authorized.POST("/submit", submitEndpoint)
     authorized.POST("/read", readEndpoint)
-
+    // v1 := authorized.Group("/v1")
+    // v2 := authorized.Group("/v2")
     testing := authorized.Group("testing")
     testing.GET("/analytics", analyticsEndpoint)
 
   }
+
+  //上传网站文件
+  r.GET("/upload_url", upload.Upload);
+
+  r.GET("/local/file", func(c *gin.Context) {
+    c.File("example.go")
+  })
 
   r.POST("/form_post", func(c *gin.Context){
     form, err := c.MultipartForm()
@@ -172,6 +184,20 @@ func main() {
       c.String(http.StatusOK, "Full Path: %s\nUser: %s\nAction: %s", fullPath, name, action)
   })
 
+  {
+    v1 := r.Group("/v1")
+    v1.POST("/login", loginEndpoint)
+    v1.POST("/submit", submitEndpoint)
+    v1.POST("/read", readEndpoint)
+  }
+
+  // Simple group: v2
+  {
+    v2 := r.Group("/v2")
+    v2.POST("/login", loginEndpoint)
+    v2.POST("/submit", submitEndpoint)
+    v2.POST("/read", readEndpoint)
+  }
 
   r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
@@ -204,7 +230,7 @@ func loginEndpoint(c *gin.Context) {
 func submitEndpoint(c *gin.Context) {
     // 可以从 Context 中获取 AuthRequired 中间件设置的用户信息
     userID, _ := c.Get("user_id")
-    username, _ := c.Get("username")
+    username, _ := c.Get("user_name")
     c.JSON(http.StatusOK, gin.H{"message": "Data submitted successfully", "user_id": userID, "username": username})
 }
 
@@ -228,3 +254,4 @@ func analyticsEndpoint(c *gin.Context) {
     }
     c.JSON(http.StatusOK, gin.H{"message": "Analytics data for " + username})
 }
+

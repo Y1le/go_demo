@@ -5,8 +5,8 @@ import (
     "fmt"
     "io/ioutil"
     "net/http"
-
-    "github.com/joho/godotenv"
+    "os"
+    // "github.com/joho/godotenv"
 )
 
 // 定义高德地图 IP 定位 API 的响应结构体
@@ -24,7 +24,7 @@ type AmapIPResponse struct {
 }
 
 
-const AmapAPIKey = os.Getenv("AmapAPIKey")
+var AmapAPIKey = os.Getenv("AmapAPIKey")
 
 // GetGeolocation 函数用于根据 IP 地址获取地理位置信息 (使用高德地图 API)
 func GetGeolocation(ip string) (*AmapIPResponse, error) {
