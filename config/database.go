@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"liam/models"
 	"log"
 	"os"
 
@@ -32,9 +33,8 @@ func InitDB() {
 
 	fmt.Println("Database connected successfully!")
 
-	// err = DB.AutoMigrate(&models.User{})
-	// if err != nil {
-	// 	log.Fatalf("Failed to auto migrate: %v", err)
-	// }
-	// fmt.Println("Database migration successful!")
+	err = DB.AutoMigrate(&models.User{})
+	if err != nil {
+		log.Fatalf("Failed to auto migrate: %v", err)
+	}
 }

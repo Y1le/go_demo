@@ -37,6 +37,9 @@ func main() {
 	userController := controllers.NewUserController(userService)
 
 	r := gin.Default()
+	// 注册全局中间件
+	// r.Use(middleware.RequestLogger()) // 自定义请求日志中间件
+
 	r.POST("/public/login", loginEndpoint)
 
 	authorized := r.Group("/")
