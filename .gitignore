@@ -1,6 +1,7 @@
 /uploads/
 /downloads/
 *.exe
+*.db
 .env
 
 /pkg/

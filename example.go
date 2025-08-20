@@ -4,59 +4,37 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"mime/multipart"
 	"net/http"
-	"os"
 
-	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"liam/controller/upload"
+	"liam/config"
+	"liam/controllers/upload"
+	controllers "liam/controllers/user"
+	"liam/models"
+	"liam/services"
 	"liam/utils"
 )
-
-func saveToAliyunOSS(file *multipart.FileHeader, bucketName, objectName string) error {
-	// 创建 OSS 客户端
-	accessKeyId := os.Getenv("OSS_ACCESS_KEY_ID")
-	accessKeySecret := os.Getenv("OSS_ACCESS_KEY_SECRET")
-	fmt.Printf("accessKeyId : %s\n", accessKeyId)
-	fmt.Printf("accessKeySecret : %s\n", accessKeySecret)
-
-	client, err := oss.New("oss-cn-heyuan.aliyuncs.com", accessKeyId, accessKeySecret)
-	if err != nil {
-		return err
-	}
-
-	// 获取存储空间
-	bucket, err := client.Bucket(bucketName)
-	if err != nil {
-		return err
-	}
-
-	// 打开上传的文件
-	srcFile, err := file.Open()
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	// 上传到 OSS
-	err = bucket.PutObject(objectName, srcFile)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("File %s uploaded to OSS bucket %s\n", objectName, bucketName)
-	return nil
-}
 
 func main() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
-	// gin.DisableConsoleColor()
+
+	//Initialize the connection DB
+	config.InitDB()
+
+	err = config.DB.AutoMigrate(&models.User{})
+	if err != nil {
+		log.Fatalf("Failed to auto migrate:%v ", err)
+	}
+	fmt.Println("Database migration successful!")
+
+	userService := services.NewUserService(config.DB)
+
+	userController := controllers.NewUserController(userService)
 
 	r := gin.Default()
 	r.POST("/public/login", loginEndpoint)
@@ -80,37 +58,6 @@ func main() {
 		c.File("example.go")
 	})
 
-	r.POST("/form_post", func(c *gin.Context) {
-		form, err := c.MultipartForm()
-		if err != nil {
-			c.JSON(400, gin.H{"error": "Invalid form data"})
-			return
-		}
-		// 获取普通字段
-		username := form.Value["username"][0] // 假设字段名是 "username"
-		password := form.Value["password"][0] // 假设字段名是 "password"
-
-		// 处理文件（如果有）
-		files := form.File["files"] // 假设文件字段名是 "files"
-		for _, file := range files {
-			log.Println("Received file:", file.Filename)
-			c.SaveUploadedFile(file, "./uploads/"+file.Filename)
-		}
-		for _, file := range files {
-			log.Println("Uploading file to Aliyun OSS:", file.Filename)
-			err := saveToAliyunOSS(file, "liam-bucket", "uploads/"+file.Filename)
-			if err != nil {
-				c.JSON(500, gin.H{"error": "OSS初始化失败: " + err.Error()})
-				return
-			}
-		}
-		c.JSON(200, gin.H{
-			"status":   "posted",
-			"username": username,
-			"password": password,
-			"files":    len(files),
-		})
-	})
 	r.POST("/post", func(c *gin.Context) {
 		id := c.Query("id")
 		name := c.Query("name")
@@ -126,13 +73,7 @@ func main() {
 			"formMessage": formMessage,
 		})
 	})
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"message": "pong",
-			"haha":    hah(),
-		})
-	})
+
 	r.GET("/user/:name", func(c *gin.Context) {
 		random := rand.Intn(1000)
 		name := c.Param("name")
@@ -198,11 +139,16 @@ func main() {
 		v2.POST("/read", readEndpoint)
 	}
 
-	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
-}
+	userRoutes := r.Group("/users")
+	{
+		userRoutes.POST("/", userController.CreateUser)
+		userRoutes.GET("/", userController.GetAllUser)
+		userRoutes.GET("/:id", userController.GetUserByID)
+		userRoutes.PUT("/:id", userController.UpdateUser)
+		userRoutes.DELETE("/:id", userController.DeleteUser)
+	}
 
-func hah() string {
-	return "haha"
+	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
 
 type LoginRequest struct {
@@ -215,7 +161,7 @@ func loginEndpoint(c *gin.Context) {
 
 	// 绑定 JSON 请求体到结构体
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}) // 绑定失败，返回错误
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	token, err := utils.GenerateToken(req.ID, req.Username)
