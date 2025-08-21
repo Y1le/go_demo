@@ -1,0 +1,20 @@
+server:
+  port: ":8080"
+
+database:
+  dsn: "root:123456@tcp(127.0.0.1:3306)/gin_gorm_db?charset=utf8mb4&parseTime=True&loc=Local"
+
+reis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+  pool_size: 10
+
+email:
+  host: "smtp.qq.com"
+  port: 465
+  username: "2430962371@qq.com"
+  passwordd: ckozdrahfyltebdg
+  from: "2430962371@qq.com"
+  retries: 3
+  timeout: 10s
