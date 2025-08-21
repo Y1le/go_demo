@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
 
 	"liam/config"
@@ -20,9 +23,15 @@ import (
 )
 
 func main() {
+	// 1. 加载配置
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
+	}
+
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	//Initialize the connection DB
@@ -33,13 +42,35 @@ func main() {
 		log.Fatalf("Failed to auto migrate database: %v", err)
 	}
 	fmt.Println("Database migration successful!")
+
+	// 3. 初始化 Redis 客户端
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		PoolSize: cfg.Redis.PoolSize,
+	})
+	// 测试 Redis 连接
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = redisClient.Ping(ctx).Result()
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	fmt.Println("Connected to Redis!")
+
+	// 4. 初始化邮件发送器
+	emailSender := utils.NewEmailSender(&cfg.Email)
+
 	r := gin.Default()
 	// 注册全局中间件
 	r.Use(middleware.RequestLogger()) // 自定义请求日志中间件
 	// 依赖注入
 	userRepo := repositories.NewUserRepository(db)
-	userService := services.NewUserService(userRepo)
-	userController := controllers.NewUserController(userService)
+	redisRepo := repositories.NewRedisRepository(redisClient)
+	emailService := services.NewEmailService(emailSender, redisRepo, userRepo)
+	userService := services.NewUserService(userRepo, emailService)
+	userController := controllers.NewUserController(userService, emailService)
 
 	r.POST("/public/login", loginEndpoint)
 
@@ -145,6 +176,11 @@ func main() {
 
 	userRoutes := r.Group("/users")
 	{
+		// 注册和邮箱验证相关路由
+		userRoutes.POST("/register", userController.RegisterUser)
+		userRoutes.POST("/send-verification-email", userController.SendVerificationEmail)
+		userRoutes.POST("/verify-email", userController.VerifyEmail)
+
 		userRoutes.POST("/", userController.CreateUser)
 		userRoutes.GET("/", userController.GetAllUser)
 		userRoutes.GET("/:id", userController.GetUserByID)

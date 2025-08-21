@@ -9,6 +9,8 @@ import (
 
 type UserService interface {
 	CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*dto.UserResponse, error)
+	RegisterUser(ctx context.Context, req *dto.RegisterRequest) (*dto.UserResponse, error)
+	VerifyUserEmail(ctx context.Context, email, code string) error
 	GetAllUser(ctx context.Context, pagination *dto.PaginationParams) ([]dto.UserResponse, int64, error)
 	GetUserByID(ctx context.Context, id uint) (*dto.UserResponse, error)
 	UpdateUser(ctx context.Context, id uint, req *dto.UpdateUserRequest) (*dto.UserResponse, error)
@@ -16,11 +18,83 @@ type UserService interface {
 }
 
 type userServiceImpl struct {
-	userRepo repositories.UserRepository
+	userRepo     repositories.UserRepository
+	emailService EmailService
 }
 
-func NewUserService(userRepo repositories.UserRepository) UserService {
-	return &userServiceImpl{userRepo: userRepo}
+func NewUserService(userRepo repositories.UserRepository, emailService EmailService) UserService {
+	return &userServiceImpl{userRepo: userRepo, emailService: emailService}
+}
+
+func (s *userServiceImpl) RegisterUser(ctx context.Context, req *dto.RegisterRequest) (*dto.UserResponse, error) {
+	// 1. 检查邮箱是否已存在
+	_, err := s.userRepo.GetUserByEmail(ctx, req.Email)
+	if err == nil {
+		return nil, err
+	}
+	// if appErr, ok := err.(*repositories.AppError); ok && appErr.Code != repositories.ErrorCodeNotFound {
+	// 	return nil, err // 其他数据库错误
+	// }
+
+	// 2. 创建用户，但初始状态为未验证
+	user := &models.User{
+		Name:       req.Name,
+		Email:      req.Email,
+		Age:        req.Age,
+		IsVerified: false, // 初始为未验证
+	}
+
+	if err := s.userRepo.CreateUser(ctx, user); err != nil {
+		return nil, err
+	}
+
+	// 3. 发送验证码邮件
+	if err := s.emailService.SendVerificationEmail(ctx, req.Email); err != nil {
+		// 如果邮件发送失败，可以考虑删除已创建的用户，或者标记为待验证但邮件发送失败
+		// 这里为了简化，直接返回错误，让用户重新尝试注册或发送验证码
+		_ = s.userRepo.DeleteUser(ctx, user.ID) // 回滚用户创建
+		return nil, err
+	}
+
+	return &dto.UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Age:       user.Age,
+		CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}, nil
+}
+
+// VerifyUserEmail 验证用户邮箱
+func (s *userServiceImpl) VerifyUserEmail(ctx context.Context, email, code string) error {
+	// 1. 验证验证码
+	isValid, err := s.emailService.VerifyEmailCode(ctx, email, code)
+	if err != nil {
+		return err // 验证码错误或过期
+	}
+	if !isValid {
+		// return &repositories.AppError{Code: repositories.ErrorCodeBadRequest, Message: "Invalid verification code"}
+		return err
+	}
+
+	// 2. 查找用户并更新验证状态
+	user, err := s.userRepo.GetUserByEmail(ctx, email)
+	if err != nil {
+		return err // 用户不存在
+	}
+
+	if user.IsVerified {
+		// return &repositories.AppError{Code: repositories.ErrorCodeConflict, Message: "Email already verified"}
+		return err
+	}
+
+	user.IsVerified = true
+	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
+		// return &repositories.AppError{Code: repositories.ErrorCodeInternal, Message: "Failed to update user verification status", Err: err}
+		return err
+	}
+	return nil
 }
 
 func (s *userServiceImpl) CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*dto.UserResponse, error) {

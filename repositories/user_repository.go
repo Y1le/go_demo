@@ -16,6 +16,7 @@ type UserRepository interface {
 	CreateUser(ctx context.Context, user *models.User) error
 	GetAllUser(ctx context.Context, offset, limit int) ([]models.User, int64, error)
 	GetUserByID(ctx context.Context, id uint) (*models.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
 	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, id uint) error
 }
@@ -65,6 +66,18 @@ func (r *userRepositoryImpl) GetUserByID(ctx context.Context, id uint) (*models.
 			return nil, errors.NewAppError(errors.ErrNotFound.Code, "User not found", result.Error)
 		}
 		return nil, errors.NewAppError(errors.ErrInternalError.Code, "Failed to retrieve user from database", result.Error)
+	}
+	return &user, nil
+}
+
+func (r *userRepositoryImpl) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+	result := r.db.WithContext(ctx).Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		if stdErr.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, errors.NewAppError(errors.ErrNotFound.Code, "User not found with this email", result.Error)
+		}
+		return nil, errors.NewAppError(errors.ErrInternalError.Code, "Failed to get user by email", result.Error)
 	}
 	return &user, nil
 }

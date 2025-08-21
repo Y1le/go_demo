@@ -40,8 +40,8 @@ type EmailConfig struct {
 
 func LoadConfig() (*Config, error) {
 	viper.SetConfigName("config")
-	viper.SetConfigType("./../yaml")
-	viper.AddConfigPath("./cocnfig")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("Error reading config file, %s", err)

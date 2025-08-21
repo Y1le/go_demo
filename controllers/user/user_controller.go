@@ -14,12 +14,13 @@ import (
 
 // UserController 定义用户控制器
 type UserController struct {
-	userService services.UserService
+	userService  services.UserService
+	emailService services.EmailService
 }
 
 // NewUserController 创建一个新的 UserController 实例
-func NewUserController(userService services.UserService) *UserController {
-	return &UserController{userService: userService}
+func NewUserController(userService services.UserService, emailService services.EmailService) *UserController {
+	return &UserController{userService: userService, emailService: emailService}
 }
 
 // handleError 统一处理错误响应
@@ -40,6 +41,72 @@ func (ctrl *UserController) handleError(c *gin.Context, err error) {
 		// 未知错误
 		c.JSON(http.StatusInternalServerError, gin.H{"code": errors.ErrInternalError.Code, "message": "An unexpected error occurred", "details": err.Error()})
 	}
+}
+
+// RegisterUser 处理用户注册请求
+func (c *UserController) RegisterUser(ctx *gin.Context) {
+	var req dto.RegisterRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userResp, err := c.userService.RegisterUser(ctx, &req)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			ctx.JSON(appErr.Code, gin.H{"error": appErr.Message})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, gin.H{
+		"message": "User registered successfully, please check your email for verification code.",
+		"user":    userResp,
+	})
+}
+
+// SendVerificationEmail 处理发送验证码请求
+func (c *UserController) SendVerificationEmail(ctx *gin.Context) {
+	var req dto.SendVerificationEmailRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := c.emailService.SendVerificationEmail(ctx, req.Email)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			ctx.JSON(appErr.Code, gin.H{"error": appErr.Message})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send verification email"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "Verification email sent successfully."})
+}
+
+// VerifyEmail 处理邮箱验证请求
+func (c *UserController) VerifyEmail(ctx *gin.Context) {
+	var req dto.VerifyEmailRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := c.userService.VerifyUserEmail(ctx, req.Email, req.Code)
+	if err != nil {
+		if appErr, ok := err.(*errors.AppError); ok {
+			ctx.JSON(appErr.Code, gin.H{"error": appErr.Message})
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify email"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "Email verified successfully."})
 }
 
 // CreateUser 处理创建用户的 HTTP 请求
