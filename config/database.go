@@ -16,7 +16,7 @@ var DB *gorm.DB
 func InitDB() (*gorm.DB, error) {
 	dbHost, dbPort, dbUser, dbPass, dbName := os.Getenv("DATABASE_HOSTNAME"), os.Getenv("DATABASE_HOSTPORT"), os.Getenv("DATABASE_USERNAME"), os.Getenv("DATABASE_PASSWORD"), os.Getenv("DATABASE_NAME")
 	if dbHost == "" || dbPort == "" || dbUser == "" || dbPass == "" || dbName == "" {
-		log.Fatalf("One or more datebase environment variables are not set. Please check your .env file")
+		log.Fatalf("One or more database environment variables are not set. Please check your .env file")
 	}
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",

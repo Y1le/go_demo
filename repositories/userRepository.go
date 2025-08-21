@@ -35,7 +35,7 @@ func (r *userRepositoryImpl) CreateUser(ctx context.Context, user *models.User) 
 		if stdErr.Is(result.Error, gorm.ErrDuplicatedKey) {
 			return errors.NewAppError(errors.ErrConflict.Code, "User with this email or name already exists", result.Error)
 		}
-		return errors.NewAppError(errors.ErrInternalError.Code, "Failed to create user in datebase", result.Error)
+		return errors.NewAppError(errors.ErrInternalError.Code, "Failed to create user in database", result.Error)
 	}
 	return nil
 
