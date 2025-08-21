@@ -1,18 +1,23 @@
 package controllers
 
 import (
+	"liam/dto"
+	"liam/pkg/errors"
 	"liam/services"
 	"net/http"
+	"strconv"
 
-	"liam/errors"
+	stdErr "errors"
 
 	"github.com/gin-gonic/gin"
 )
 
+// UserController 定义用户控制器
 type UserController struct {
 	userService services.UserService
 }
 
+// NewUserController 创建一个新的 UserController 实例
 func NewUserController(userService services.UserService) *UserController {
 	return &UserController{userService: userService}
 }
@@ -20,7 +25,7 @@ func NewUserController(userService services.UserService) *UserController {
 // handleError 统一处理错误响应
 func (ctrl *UserController) handleError(c *gin.Context, err error) {
 	var appErr *errors.AppError
-	if errors.As(err, &appErr) {
+	if stdErr.As(err, &appErr) {
 		switch appErr.Code {
 		case errors.ErrNotFound.Code:
 			c.JSON(http.StatusNotFound, gin.H{"code": appErr.Code, "message": appErr.Message})
@@ -37,110 +42,101 @@ func (ctrl *UserController) handleError(c *gin.Context, err error) {
 	}
 }
 
-// func (ctrl *UserController) CreateUser(c *gin.Context) {
-// 	var user models.User
-// 	if err := c.ShouldBindJSON(&user); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-// 		return
-// 	}
+// CreateUser 处理创建用户的 HTTP 请求
+func (ctrl *UserController) CreateUser(c *gin.Context) {
+	var req dto.CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
+		return
+	}
 
-// 	if err := ctrl.userService.CreateUser(&user); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failedd to created user"})
-// 		return
-// 	}
-// 	c.JSON(http.StatusCreated, user)
-// }
+	userResp, err := ctrl.userService.CreateUser(c.Request.Context(), &req) // 传递 context
+	if err != nil {
+		ctrl.handleError(c, err)
+		return
+	}
 
-// func (ctrl *UserController) GetAllUser(c *gin.Context) {
-// 	users, err := ctrl.userService.GetAllUser()
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve users"})
-// 		return
-// 	}
+	c.JSON(http.StatusCreated, userResp)
+}
 
-// 	c.JSON(http.StatusOK, users)
-// }
+// GetUserByID 处理根据 ID 获取用户的 HTTP 请求
+func (ctrl *UserController) GetUserByID(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
+		return
+	}
 
-// func (ctrl *UserController) GetUserByID(c *gin.Context) {
-// 	idStr := c.Param("id")
-// 	id, err := strconv.ParseUint(idStr, 10, 32)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-// 	}
+	userResp, err := ctrl.userService.GetUserByID(c.Request.Context(), uint(id))
+	if err != nil {
+		ctrl.handleError(c, err)
+		return
+	}
 
-// 	user, err := ctrl.userService.GetUserByID(uint(id))
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{
-// 			"error": "Failed to retrieve user",
-// 		})
-// 	}
-// 	if user == nil {
-// 		c.JSON(http.StatusNotFound, gin.H{
-// 			"error": "User not found",
-// 		})
-// 	}
-// 	c.JSON(http.StatusOK, user)
-// }
+	c.JSON(http.StatusOK, userResp)
+}
 
-// func (ctrl *UserController) UpdateUser(c *gin.Context) {
-// 	idStr := c.Param("id")
-// 	id, err := strconv.ParseUint(idStr, 10, 32)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{
-// 			"error": "Invaild user ID",
-// 		})
-// 		return
-// 	}
+// UpdateUser 处理更新用户的 HTTP 请求
+func (ctrl *UserController) UpdateUser(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
+		return
+	}
 
-// 	user, err := ctrl.userService.GetUserByID(uint(id))
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{
-// 			"error": "Failed to retrieve user for update",
-// 		})
-// 		return
-// 	}
-// 	if user == nil {
-// 		c.JSON(http.StatusNotFound, gin.H{
-// 			"error": "User not found",
-// 		})
-// 		return
-// 	}
+	var req dto.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
+		return
+	}
 
-// 	if err := c.ShouldBindJSON(&user); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-// 		return
-// 	}
+	userResp, err := ctrl.userService.UpdateUser(c.Request.Context(), uint(id), &req)
+	if err != nil {
+		ctrl.handleError(c, err)
+		return
+	}
 
-// 	if err := ctrl.userService.UpdateUser(user); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{
-// 			"error": "Failed to uptate user",
-// 		})
-// 		return
-// 	}
-// 	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, userResp)
+}
 
-// }
+// DeleteUser 处理删除用户的 HTTP 请求
+func (ctrl *UserController) DeleteUser(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
+		return
+	}
 
-// func (ctrl *UserController) DeleteUser(c *gin.Context) {
-// 	idStr := c.Param("id")
+	if err := ctrl.userService.DeleteUser(c.Request.Context(), uint(id)); err != nil {
+		ctrl.handleError(c, err)
+		return
+	}
 
-// 	id, err := strconv.ParseUint(idStr, 10, 32)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-// 		return
-// 	}
+	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully (soft delete)"})
+}
 
-// 	err = ctrl.userService.DeleteUser(uint(id))
-// 	if err != nil {
-// 		if err == gorm.ErrRecordNotFound {
-// 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found or already deleted"})
-// 		} else {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
-// 		}
-// 		return
-// 	}
+// GetAllUsers 处理获取所有用户的 HTTP 请求，支持分页
+func (ctrl *UserController) GetAllUser(c *gin.Context) {
+	var pagination dto.PaginationParams
+	// 使用 ShouldBindQuery 来绑定查询参数
+	if err := c.ShouldBindQuery(&pagination); err != nil {
+		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid pagination parameters", err))
+		return
+	}
 
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"message": "User delete successfully",
-// 	})
-// }
+	usersResp, total, err := ctrl.userService.GetAllUser(c.Request.Context(), &pagination)
+	if err != nil {
+		ctrl.handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":  usersResp,
+		"total": total,
+		"page":  pagination.Page,
+		"limit": pagination.PageSize,
+	})
+}

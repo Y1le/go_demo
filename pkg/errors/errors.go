@@ -49,6 +49,3 @@ func IsInvalidInput(err error) bool {
 	var appErr *AppError
 	return errors.As(err, &appErr) && appErr.Code == ErrInvalidInput.Code
 }
-
-// func (m MyError) Is(target error) bool { return target == fs.ErrExist }
-func Is(m error, target error) bool { return m == target }

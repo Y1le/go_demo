@@ -44,6 +44,22 @@ func (s *userServiceImpl) CreateUser(ctx context.Context, req *dto.CreateUserReq
 	}, nil
 }
 
+func (s *userServiceImpl) GetUserByID(ctx context.Context, id uint) (*dto.UserResponse, error) {
+	user, err := s.userRepo.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Age:       user.Age,
+		CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}, nil
+}
+
 func (s *userServiceImpl) UpdateUser(ctx context.Context, id uint, req *dto.UpdateUserRequest) (*dto.UserResponse, error) {
 	user, err := s.userRepo.GetUserByID(ctx, id)
 	if err != nil {

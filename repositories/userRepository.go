@@ -5,6 +5,8 @@ import (
 	"liam/models"
 	"liam/pkg/errors"
 
+	stdErr "errors"
+
 	"gorm.io/gorm"
 )
 
@@ -30,7 +32,7 @@ func (r *userRepositoryImpl) CreateUser(ctx context.Context, user *models.User) 
 	// return s.db.Create(user).Error
 	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
+		if stdErr.Is(result.Error, gorm.ErrDuplicatedKey) {
 			return errors.NewAppError(errors.ErrConflict.Code, "User with this email or name already exists", result.Error)
 		}
 		return errors.NewAppError(errors.ErrInternalError.Code, "Failed to create user in datebase", result.Error)
@@ -59,7 +61,7 @@ func (r *userRepositoryImpl) GetUserByID(ctx context.Context, id uint) (*models.
 	var user models.User
 	result := r.db.WithContext(ctx).First(&user, id)
 	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		if stdErr.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, errors.NewAppError(errors.ErrNotFound.Code, "User not found", result.Error)
 		}
 		return nil, errors.NewAppError(errors.ErrInternalError.Code, "Failed to retrieve user from database", result.Error)

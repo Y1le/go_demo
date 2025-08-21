@@ -13,6 +13,8 @@ import (
 	"liam/controllers/upload"
 	controllers "liam/controllers/user"
 	"liam/models"
+	"liam/pkg/middleware"
+	"liam/repositories"
 	"liam/services"
 	"liam/utils"
 )
@@ -24,21 +26,20 @@ func main() {
 	}
 
 	//Initialize the connection DB
-	config.InitDB()
-
-	err = config.DB.AutoMigrate(&models.User{})
+	db, err := config.InitDB()
+	// 自动迁移数据库表
+	err = config.AutoMigrate(db, &models.User{}) // 传入模型
 	if err != nil {
-		log.Fatalf("Failed to auto migrate:%v ", err)
+		log.Fatalf("Failed to auto migrate database: %v", err)
 	}
 	fmt.Println("Database migration successful!")
-
-	userService := services.NewUserService(config.DB)
-
-	userController := controllers.NewUserController(userService)
-
 	r := gin.Default()
 	// 注册全局中间件
-	// r.Use(middleware.RequestLogger()) // 自定义请求日志中间件
+	r.Use(middleware.RequestLogger()) // 自定义请求日志中间件
+	// 依赖注入
+	userRepo := repositories.NewUserRepository(db)
+	userService := services.NewUserService(userRepo)
+	userController := controllers.NewUserController(userService)
 
 	r.POST("/public/login", loginEndpoint)
 
