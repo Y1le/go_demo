@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -37,15 +38,30 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	logWriter, err := utils.NewDailyLogWriter("logs", "runtime")
+	if err != nil {
+		log.Fatalf("Failed to create daily log writer: %v", err)
+	}
+	defer logWriter.Close()
+	multiWriter := io.MultiWriter(os.Stdout, logWriter)
 	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		log.New(multiWriter, "", log.LstdFlags), // 使用多路复用写入器
 		logger.Config{
 			SlowThreshold:             time.Second, // Slow SQL threshold
 			LogLevel:                  logger.Info, // Log level
 			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
-			Colorful:                  true,        // Disable color
+			Colorful:                  false,       // 在文件中通常不希望有颜色，设为 false
 		},
 	)
+	// newLogger := logger.New(
+	// 	log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+	// 	logger.Config{
+	// 		SlowThreshold:             time.Second, // Slow SQL threshold
+	// 		LogLevel:                  logger.Info, // Log level
+	// 		IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
+	// 		Colorful:                  true,        // Disable color
+	// 	},
+	// )
 
 	db, err := gorm.Open(mysql.Open(cfg.Database.DSN), &gorm.Config{
 		Logger: newLogger,
