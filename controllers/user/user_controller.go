@@ -53,11 +53,7 @@ func (c *UserController) RegisterUser(ctx *gin.Context) {
 
 	userResp, err := c.userService.RegisterUser(ctx, &req)
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			ctx.JSON(appErr.Code, gin.H{"error": appErr.Message})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -98,11 +94,7 @@ func (c *UserController) VerifyEmail(ctx *gin.Context) {
 
 	err := c.userService.VerifyUserEmail(ctx, req.Email, req.Code)
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			ctx.JSON(appErr.Code, gin.H{"error": appErr.Message})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify email"})
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 

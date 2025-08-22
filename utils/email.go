@@ -37,7 +37,8 @@ func (s *emailSenderImpl) SendEmail(to, subject, body string) error {
 	m.SetHeader("To", to)
 	m.SetHeader("Subject", subject)
 	m.SetBody("text/html", body)
-
+	log.Println(body)
+	return nil
 	var err error
 	for i := 0; i < s.retries; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
@@ -45,6 +46,7 @@ func (s *emailSenderImpl) SendEmail(to, subject, body string) error {
 
 		done := make(chan error, 1)
 		go func() {
+			defer cancel()
 			done <- s.dialer.DialAndSend(m)
 		}()
 
@@ -52,11 +54,11 @@ func (s *emailSenderImpl) SendEmail(to, subject, body string) error {
 		case <-ctx.Done():
 			err := fmt.Errorf("email sending timed out after %s", s.timeout)
 			log.Printf("Attempt %d: %v", i+1, err)
-		case <-done:
-			if err == nil {
+		case sendErr := <-done:
+			if sendErr == nil {
 				return nil // 邮件发送成功
 			}
-			log.Printf("Attempt %d: Failedd to send email to %s: %v", i+1, to, err)
+			log.Printf("Attempt %d: Failed to send email to %s. Error: %v", i+1, to, sendErr)
 		}
 		time.Sleep(1 * time.Second)
 	}

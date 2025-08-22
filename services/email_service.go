@@ -36,11 +36,12 @@ func NewEmailService(sender utils.EmailSender, redisRepo repositories.RedisRepos
 
 func (s *emailServiceImpl) SendVerificationEmail(ctx context.Context, email string) error {
 	// 检查邮箱是否已注册（可选，取决于业务逻辑）
-	_, err := s.userRepo.GetUserByEmail(ctx, email)
-	if err == nil {
-		// 如果用户已存在，可以返回错误，或者直接发送验证码（例如用于重置密码）
-		return err
-	}
+	// _, err := s.userRepo.GetUserByEmail(ctx, email)
+	// if err == nil {
+	// 	// 如果用户已存在，可以返回错误，或者直接发送验证码（例如用于重置密码）
+	// 	return err
+	// }
+	fmt.Println("enter into 3")
 
 	code := utils.GenerateVerificationCode()
 	subject := "您的注册验证码"
@@ -61,6 +62,7 @@ func (s *emailServiceImpl) SendVerificationEmail(ctx context.Context, email stri
 	if err := s.emailSender.SendEmail(email, subject, body); err != nil {
 		return err
 	}
+	fmt.Println("complate success")
 	return nil
 }
 

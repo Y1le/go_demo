@@ -4,6 +4,7 @@ import (
 	"context"
 	"liam/dto"
 	"liam/models"
+	"liam/pkg/errors"
 	"liam/repositories"
 )
 
@@ -27,21 +28,17 @@ func NewUserService(userRepo repositories.UserRepository, emailService EmailServ
 }
 
 func (s *userServiceImpl) RegisterUser(ctx context.Context, req *dto.RegisterRequest) (*dto.UserResponse, error) {
-	// 1. 检查邮箱是否已存在
+
 	_, err := s.userRepo.GetUserByEmail(ctx, req.Email)
 	if err == nil {
 		return nil, err
 	}
-	// if appErr, ok := err.(*repositories.AppError); ok && appErr.Code != repositories.ErrorCodeNotFound {
-	// 	return nil, err // 其他数据库错误
-	// }
 
-	// 2. 创建用户，但初始状态为未验证
 	user := &models.User{
 		Name:       req.Name,
 		Email:      req.Email,
 		Age:        req.Age,
-		IsVerified: false, // 初始为未验证
+		IsVerified: false,
 	}
 
 	if err := s.userRepo.CreateUser(ctx, user); err != nil {
@@ -50,8 +47,6 @@ func (s *userServiceImpl) RegisterUser(ctx context.Context, req *dto.RegisterReq
 
 	// 3. 发送验证码邮件
 	if err := s.emailService.SendVerificationEmail(ctx, req.Email); err != nil {
-		// 如果邮件发送失败，可以考虑删除已创建的用户，或者标记为待验证但邮件发送失败
-		// 这里为了简化，直接返回错误，让用户重新尝试注册或发送验证码
 		_ = s.userRepo.DeleteUser(ctx, user.ID) // 回滚用户创建
 		return nil, err
 	}
@@ -74,25 +69,23 @@ func (s *userServiceImpl) VerifyUserEmail(ctx context.Context, email, code strin
 		return err // 验证码错误或过期
 	}
 	if !isValid {
-		// return &repositories.AppError{Code: repositories.ErrorCodeBadRequest, Message: "Invalid verification code"}
-		return err
+		return errors.NewAppError(errors.ErrUnauthorized.Code, "Invalid verification code", nil)
 	}
 
 	// 2. 查找用户并更新验证状态
 	user, err := s.userRepo.GetUserByEmail(ctx, email)
 	if err != nil {
-		return err // 用户不存在
+		return errors.NewAppError(errors.ErrConflict.Code, "需要验证邮箱未注册", err) // 用户不存在
 	}
 
 	if user.IsVerified {
 		// return &repositories.AppError{Code: repositories.ErrorCodeConflict, Message: "Email already verified"}
-		return err
+		return errors.NewAppError(errors.ErrConflict.Code, "邮箱已注册", nil)
 	}
 
 	user.IsVerified = true
 	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
-		// return &repositories.AppError{Code: repositories.ErrorCodeInternal, Message: "Failed to update user verification status", Err: err}
-		return err
+		return errors.NewAppError(errors.ErrInternalError.Code, "Failed to update user verification status", err)
 	}
 	return nil
 }

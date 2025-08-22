@@ -6,11 +6,15 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"liam/config"
 	"liam/controllers/upload"
@@ -33,15 +37,43 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+		logger.Config{
+			SlowThreshold:             time.Second, // Slow SQL threshold
+			LogLevel:                  logger.Info, // Log level
+			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
+			Colorful:                  true,        // Disable color
+		},
+	)
 
-	//Initialize the connection DB
-	db, err := config.InitDB()
-	// 自动迁移数据库表
-	err = config.AutoMigrate(db, &models.User{}) // 传入模型
+	db, err := gorm.Open(mysql.Open(cfg.Database.DSN), &gorm.Config{
+		Logger: newLogger,
+	})
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("failed to get sql.DB: %w", err)
+	}
+	sqlDB.SetMaxIdleConns(10)           // 最大空闲连接数
+	sqlDB.SetMaxOpenConns(100)          // 最大打开连接数
+	sqlDB.SetConnMaxLifetime(time.Hour) // 连接可复用的最长时间
+	// 自动迁移模型
+	err = db.AutoMigrate(&models.User{})
 	if err != nil {
 		log.Fatalf("Failed to auto migrate database: %v", err)
 	}
-	fmt.Println("Database migration successful!")
+	fmt.Println("Database migration completed!")
+	// Initialize the connection DB
+	// db, err := config.InitDB()
+	// 自动迁移数据库表
+	// err = config.AutoMigrate(db, &models.User{}) // 传入模型
+	// if err != nil {
+	// 	log.Fatalf("Failed to auto migrate database: %v", err)
+	// }
+	// fmt.Println("Database migration successful!")
 
 	// 3. 初始化 Redis 客户端
 	redisClient := redis.NewClient(&redis.Options{
@@ -147,6 +179,28 @@ func main() {
 		}
 
 		c.JSON(http.StatusOK, response)
+	})
+
+	r.POST("/sendEmail", func(c *gin.Context) {
+		var json map[string]interface{}
+		if err := c.ShouldBindJSON(&json); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		email, ok := json["email"].(string)
+		if !ok {
+			c.JSON(400, gin.H{"error": "Email field is missing or not a string"})
+			return
+		}
+		// if err := emailService.SendVerificationEmail(ctx, email); err != nil {
+		// 	c.JSON(400, gin.H{"error": err})
+		// 	return
+		// }
+		if err := emailSender.SendEmail(email, "title", "123456"); err != nil {
+			c.JSON(400, gin.H{"error": err})
+			return
+		}
+		c.JSON(200, gin.H{"message": "Email received successfully", "email": email})
 	})
 
 	r.POST("/user/:name/*action", func(c *gin.Context) {
