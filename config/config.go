@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig
 	Redis    RedisConfig
 	Email    EmailConfig
+	Kafka    KafkaConfig
 }
 
 type ServerConfig struct {
@@ -36,6 +37,11 @@ type EmailConfig struct {
 	From     string
 	Retries  int
 	Timeout  time.Duration
+}
+
+type KafkaConfig struct {
+	Broker string
+	Topic  string
 }
 
 func LoadConfig() (*Config, error) {

@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/joho/godotenv"
+	"github.com/robfig/cron/v3"
+	"github.com/segmentio/kafka-go"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -98,6 +100,7 @@ func main() {
 		DB:       cfg.Redis.DB,
 		PoolSize: cfg.Redis.PoolSize,
 	})
+
 	// 测试 Redis 连接
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -110,6 +113,25 @@ func main() {
 	// 4. 初始化邮件发送器
 	emailSender := utils.NewEmailSender(&cfg.Email)
 
+	// 5. 初始化 Kafka 生产者
+	kafkaWriter := &kafka.Writer{
+		Addr:     kafka.TCP(cfg.Kafka.Broker), // 从配置中获取 Kafka Broker 地址
+		Topic:    cfg.Kafka.Topic,             // 从配置中获取 Kafka Topic 名称
+		Balancer: &kafka.LeastBytes{},
+		// BatchSize:    100, // 可以根据需要配置批量发送
+		// BatchTimeout: 1 * time.Second,
+		Logger:      kafka.LoggerFunc(log.Printf), // 添加 Kafka 日志
+		ErrorLogger: kafka.LoggerFunc(log.Printf),
+	}
+	defer func() {
+		if err := kafkaWriter.Close(); err != nil {
+			log.Printf("Failed to close Kafka writer: %v", err)
+		} else {
+			log.Println("Kafka writer closed.")
+		}
+	}()
+	fmt.Println("Kafka writer initialized.")
+
 	r := gin.Default()
 	// 注册全局中间件
 	r.Use(middleware.RequestLogger()) // 自定义请求日志中间件
@@ -119,6 +141,31 @@ func main() {
 	emailService := services.NewEmailService(emailSender, redisRepo, userRepo)
 	userService := services.NewUserService(userRepo, emailService)
 	userController := controllers.NewUserController(userService, emailService)
+	userInfoSenderService := services.NewUserInfoSenderService(userRepo, kafkaWriter, cfg.Kafka.Topic)
+
+	// 启动定时任务 (Kafka 生产者)
+	c := cron.New(cron.WithLocation(time.Local), cron.WithSeconds()) // 添加 cron.WithSeconds() 选项
+	// 每天早上 9 点 0 分 0 秒执行任务
+	_, err = c.AddFunc("0 0 9 * * *", func() { // 现在 6 个字段的表达式是有效的
+		taskCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		log.Println("Cron job triggered: Sending daily user info to Kafka.")
+		err := userInfoSenderService.SendDailyUserInfo(taskCtx)
+		if err != nil {
+			log.Printf("Error during daily user info sending task to Kafka: %v", err)
+		}
+	})
+	if err != nil {
+		log.Fatalf("Failed to add cron job: %v", err)
+	}
+	c.Start() // 启动 cron 调度器
+	log.Println("Cron scheduler started for daily user info.")
+	defer func() {
+		c.Stop()
+		log.Println("Cron scheduler stopped.")
+	}()
+
+	log.Println("Cron scheduler started for daily user info.")
 
 	r.POST("/public/login", loginEndpoint)
 

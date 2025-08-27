@@ -19,6 +19,7 @@ type UserRepository interface {
 	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
 	UpdateUser(ctx context.Context, user *models.User) error
 	DeleteUser(ctx context.Context, id uint) error
+	GetAllUsers(ctx context.Context) ([]models.User, error)
 }
 
 type userRepositoryImpl struct {
@@ -104,4 +105,12 @@ func (r *userRepositoryImpl) DeleteUser(ctx context.Context, id uint) error {
 		return errors.NewAppError(errors.ErrNotFound.Code, "User not found or already deleted", nil)
 	}
 	return nil
+}
+
+func (r *userRepositoryImpl) GetAllUsers(ctx context.Context) ([]models.User, error) {
+	var users []models.User
+	if err := r.db.WithContext(ctx).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
 }

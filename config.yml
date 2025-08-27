@@ -1,0 +1,24 @@
+server:
+  port: ":8080"
+
+database:
+  dsn: "root:123456@tcp(127.0.0.1:3306)/gin_gorm_db?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:6379"
+  Password: "123456"
+  db: 0
+  pool_size: 10
+
+email:
+  host: "smtp.qq.com"
+  port: 465
+  username: "2430962371@qq.com"
+  password: ccwczjpdjgludiab
+  from: "2430962371@qq.com"
+  retries: 3
+  timeout: 10s
+
+kafka: 
+  brokers: ["localhost:9092"] 
+  topic: "daily_user_info_emails"
