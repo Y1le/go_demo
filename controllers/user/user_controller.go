@@ -1,4 +1,5 @@
-package controllers
+// controllers/user/user_controller.go
+package user
 
 import (
 	"liam/dto"
@@ -20,40 +21,71 @@ type UserController struct {
 
 // NewUserController 创建一个新的 UserController 实例
 func NewUserController(userService services.UserService, emailService services.EmailService) *UserController {
-	return &UserController{userService: userService, emailService: emailService}
+	return &UserController{
+		userService:  userService,
+		emailService: emailService,
+	}
 }
 
 // handleError 统一处理错误响应
-func (ctrl *UserController) handleError(c *gin.Context, err error) {
+func (uc *UserController) handleError(c *gin.Context, err error) {
 	var appErr *errors.AppError
 	if stdErr.As(err, &appErr) {
+		statusCode := http.StatusInternalServerError
 		switch appErr.Code {
 		case errors.ErrNotFound.Code:
-			c.JSON(http.StatusNotFound, gin.H{"code": appErr.Code, "message": appErr.Message})
+			statusCode = http.StatusNotFound
 		case errors.ErrInvalidInput.Code:
-			c.JSON(http.StatusBadRequest, gin.H{"code": appErr.Code, "message": appErr.Message, "details": appErr.Unwrap().Error()})
+			statusCode = http.StatusBadRequest
 		case errors.ErrConflict.Code:
-			c.JSON(http.StatusConflict, gin.H{"code": appErr.Code, "message": appErr.Message})
-		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"code": appErr.Code, "message": appErr.Message, "details": appErr.Unwrap().Error()})
+			statusCode = http.StatusConflict
 		}
+		c.JSON(statusCode, gin.H{
+			"code":    appErr.Code,
+			"message": appErr.Message,
+			"details": appErr.Unwrap(),
+		})
 	} else {
-		// 未知错误
-		c.JSON(http.StatusInternalServerError, gin.H{"code": errors.ErrInternalError.Code, "message": "An unexpected error occurred", "details": err.Error()})
+		// 未知系统错误
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    errors.ErrInternalError.Code,
+			"message": "An unexpected error occurred",
+			"details": err.Error(),
+		})
 	}
 }
 
-// RegisterUser 处理用户注册请求
-func (c *UserController) RegisterUser(ctx *gin.Context) {
-	var req dto.RegisterRequest
+func (uc *UserController) Login(ctx *gin.Context) {
+	var req dto.LoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
 		return
 	}
 
-	userResp, err := c.userService.RegisterUser(ctx, &req)
+	// 4. 验证用户登录
+	reap, err := uc.userService.Login(ctx, req.Email, req.Password)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		uc.handleError(ctx, err)
+		return
+	}
+	// 5. 返回登录成功响应
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Login successful.",
+		"data":    reap,
+	})
+}
+
+// RegisterUser 处理用户注册请求
+func (uc *UserController) Register(ctx *gin.Context) {
+	var req dto.RegisterRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
+		return
+	}
+
+	userResp, err := uc.userService.RegisterUser(ctx, &req)
+	if err != nil {
+		uc.handleError(ctx, err)
 		return
 	}
 
@@ -64,20 +96,16 @@ func (c *UserController) RegisterUser(ctx *gin.Context) {
 }
 
 // SendVerificationEmail 处理发送验证码请求
-func (c *UserController) SendVerificationEmail(ctx *gin.Context) {
+func (uc *UserController) SendVerificationEmail(ctx *gin.Context) {
 	var req dto.SendVerificationEmailRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
 		return
 	}
 
-	err := c.emailService.SendVerificationEmail(ctx, req.Email)
+	err := uc.emailService.SendVerificationEmail(ctx, req.Email)
 	if err != nil {
-		if appErr, ok := err.(*errors.AppError); ok {
-			ctx.JSON(appErr.Code, gin.H{"error": appErr.Message})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send verification email"})
+		uc.handleError(ctx, err)
 		return
 	}
 
@@ -85,16 +113,16 @@ func (c *UserController) SendVerificationEmail(ctx *gin.Context) {
 }
 
 // VerifyEmail 处理邮箱验证请求
-func (c *UserController) VerifyEmail(ctx *gin.Context) {
+func (uc *UserController) VerifyEmail(ctx *gin.Context) {
 	var req dto.VerifyEmailRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
 		return
 	}
 
-	err := c.userService.VerifyUserEmail(ctx, req.Email, req.Code)
+	err := uc.userService.VerifyUserEmail(ctx, req.Email, req.Code)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		uc.handleError(ctx, err)
 		return
 	}
 
@@ -102,97 +130,96 @@ func (c *UserController) VerifyEmail(ctx *gin.Context) {
 }
 
 // CreateUser 处理创建用户的 HTTP 请求
-func (ctrl *UserController) CreateUser(c *gin.Context) {
+func (uc *UserController) CreateUser(ctx *gin.Context) {
 	var req dto.CreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
 		return
 	}
 
-	userResp, err := ctrl.userService.CreateUser(c.Request.Context(), &req) // 传递 context
+	userResp, err := uc.userService.CreateUser(ctx.Request.Context(), &req)
 	if err != nil {
-		ctrl.handleError(c, err)
+		uc.handleError(ctx, err)
 		return
 	}
 
-	c.JSON(http.StatusCreated, userResp)
+	ctx.JSON(http.StatusCreated, userResp)
 }
 
-// GetUserByID 处理根据 ID 获取用户的 HTTP 请求
-func (ctrl *UserController) GetUserByID(c *gin.Context) {
-	idStr := c.Param("id")
+// GetUserByID 根据 ID 获取用户
+func (uc *UserController) GetUserByID(ctx *gin.Context) {
+	idStr := ctx.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
 		return
 	}
 
-	userResp, err := ctrl.userService.GetUserByID(c.Request.Context(), uint(id))
+	userResp, err := uc.userService.GetUserByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		ctrl.handleError(c, err)
+		uc.handleError(ctx, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, userResp)
+	ctx.JSON(http.StatusOK, userResp)
 }
 
-// UpdateUser 处理更新用户的 HTTP 请求
-func (ctrl *UserController) UpdateUser(c *gin.Context) {
-	idStr := c.Param("id")
+// UpdateUser 更新用户信息
+func (uc *UserController) UpdateUser(ctx *gin.Context) {
+	idStr := ctx.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
 		return
 	}
 
 	var req dto.UpdateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid request body", err))
 		return
 	}
 
-	userResp, err := ctrl.userService.UpdateUser(c.Request.Context(), uint(id), &req)
+	userResp, err := uc.userService.UpdateUser(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
-		ctrl.handleError(c, err)
+		uc.handleError(ctx, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, userResp)
+	ctx.JSON(http.StatusOK, userResp)
 }
 
-// DeleteUser 处理删除用户的 HTTP 请求
-func (ctrl *UserController) DeleteUser(c *gin.Context) {
-	idStr := c.Param("id")
+// DeleteUser 删除用户（软删除）
+func (uc *UserController) DeleteUser(ctx *gin.Context) {
+	idStr := ctx.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid user ID format", err))
 		return
 	}
 
-	if err := ctrl.userService.DeleteUser(c.Request.Context(), uint(id)); err != nil {
-		ctrl.handleError(c, err)
+	if err := uc.userService.DeleteUser(ctx.Request.Context(), uint(id)); err != nil {
+		uc.handleError(ctx, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully (soft delete)"})
+	ctx.JSON(http.StatusOK, gin.H{"message": "User deleted successfully (soft delete)"})
 }
 
-// GetAllUsers 处理获取所有用户的 HTTP 请求，支持分页
-func (ctrl *UserController) GetAllUser(c *gin.Context) {
+// GetAllUsers 获取所有用户（支持分页）
+func (uc *UserController) GetAllUsers(ctx *gin.Context) {
 	var pagination dto.PaginationParams
-	// 使用 ShouldBindQuery 来绑定查询参数
-	if err := c.ShouldBindQuery(&pagination); err != nil {
-		ctrl.handleError(c, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid pagination parameters", err))
+	if err := ctx.ShouldBindQuery(&pagination); err != nil {
+		uc.handleError(ctx, errors.NewAppError(errors.ErrInvalidInput.Code, "Invalid pagination parameters", err))
 		return
 	}
 
-	usersResp, total, err := ctrl.userService.GetAllUser(c.Request.Context(), &pagination)
+	usersResp, total, err := uc.userService.GetAllUser(ctx.Request.Context(), &pagination)
 	if err != nil {
-		ctrl.handleError(c, err)
+		uc.handleError(ctx, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	ctx.JSON(http.StatusOK, gin.H{
 		"data":  usersResp,
 		"total": total,
 		"page":  pagination.Page,

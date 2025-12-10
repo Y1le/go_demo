@@ -72,7 +72,7 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
-func GenerateToken(userID string, username string) (string, error) {
+func GenerateToken(userID uint, username string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id":   userID,
 		"user_name": username,

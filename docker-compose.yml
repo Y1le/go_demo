@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: liam-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: liam-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+  app:
+    build: .
+    container_name: liam-app
+    ports:
+      - "8080:8080"
+    environment:
+      APP_SERVER_PORT: ${APP_SERVER_PORT}
+      APP_DATABASE_DSN: ${APP_DATABASE_DSN}
+      
+      APP_REDIS_ADDR: ${APP_REDIS_ADDR}
+      APP_REDIS_PASSWORD: ${APP_REDIS_PASSWORD}
+      APP_REDIS_DB: ${APP_REDIS_DB}
+      APP_REDIS_POOL_SIZE: ${APP_REDIS_POOL_SIZE}
+
+      APP_EMAIL_HOST: ${APP_EMAIL_HOST}
+      APP_EMAIL_PORT: ${APP_EMAIL_PORT}
+      APP_EMAIL_USERNAME: ${APP_EMAIL_USERNAME}
+      APP_EMAIL_PASSWORD: ${APP_EMAIL_PASSWORD}
+      APP_EMAIL_FROM: ${APP_EMAIL_FROM}
+      APP_EMAIL_RETRIES: ${APP_EMAIL_RETRIES}
+      APP_EMAIL_TIMEOUT: ${APP_EMAIL_TIMEOUT}
+
+      APP_OSS_ENDPOINT: ${APP_OSS_ENDPOINT}
+      APP_OSS_ACCESS_KEY_ID: ${APP_OSS_ACCESS_KEY_ID}
+      APP_OSS_ACCESS_KEY_SECRET: ${APP_OSS_ACCESS_KEY_SECRET}
+      APP_OSS_BUCKET_NAME: ${APP_OSS_BUCKET_NAME}
+
+      APP_JWT_SECRET: ${APP_JWT_SECRET}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL}
+      TZ: ${TZ}
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:

@@ -1,9 +1,10 @@
-/uploads/
-/downloads/
+/uploads/*
+/downloads/*
 *.exe
 *.db
 .env
-
+.env.local
+/mocks/*
 *.yaml
 
-/logs/
+/logs/*

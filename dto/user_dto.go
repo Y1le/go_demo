@@ -19,6 +19,7 @@ type UserResponse struct {
 	Name      string `json:"name"`
 	Email     string `json:"email"`
 	Age       int    `json:"age"`
+	Token     string `json:"token"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -26,6 +27,11 @@ type UserResponse struct {
 type PaginationParams struct {
 	Page     int `form:"page,default=1" binding:"gte=1"`
 	PageSize int `form:"page_size,default=10" banding:"gte=1,lte=100"`
+}
+
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
 }
 
 type RegisterRequest struct {

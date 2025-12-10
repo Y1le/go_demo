@@ -6,10 +6,12 @@ import (
 	"liam/models"
 	"liam/pkg/errors"
 	"liam/repositories"
+	"liam/utils"
 )
 
 type UserService interface {
 	CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*dto.UserResponse, error)
+	Login(ctx context.Context, email, password string) (*dto.UserResponse, error)
 	RegisterUser(ctx context.Context, req *dto.RegisterRequest) (*dto.UserResponse, error)
 	VerifyUserEmail(ctx context.Context, email, code string) error
 	GetAllUser(ctx context.Context, pagination *dto.PaginationParams) ([]dto.UserResponse, int64, error)
@@ -25,6 +27,35 @@ type userServiceImpl struct {
 
 func NewUserService(userRepo repositories.UserRepository, emailService EmailService) UserService {
 	return &userServiceImpl{userRepo: userRepo, emailService: emailService}
+}
+
+func (s *userServiceImpl) Login(ctx context.Context, email, password string) (*dto.UserResponse, error) {
+	// 1. 查找用户
+	user, err := s.userRepo.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, err // 用户不存在
+	}
+	// 2. 验证密码
+	if user.Password != password {
+		return nil, errors.NewAppError(errors.ErrUnauthorized.Code, "Invalid password", nil)
+	}
+
+	token, err := utils.GenerateToken(user.ID, user.Name)
+	if err != nil {
+		return nil, errors.NewAppError(errors.ErrInternalError.Code, "Failed to generate token", err)
+	}
+
+	// 3. 返回用户响应
+	return &dto.UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Age:       user.Age,
+		Token:     token,
+		CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}, nil
+
 }
 
 func (s *userServiceImpl) RegisterUser(ctx context.Context, req *dto.RegisterRequest) (*dto.UserResponse, error) {

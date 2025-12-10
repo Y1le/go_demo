@@ -1,0 +1,5 @@
+-- init.sql
+CREATE TABLE IF NOT EXISTS migrations (
+    id VARCHAR(255) PRIMARY KEY,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
