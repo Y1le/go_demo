@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"liam/config"
+	"liam/internal/cronjobs"
 	"liam/internal/routes"
 	"liam/models"
 	"liam/repositories"
@@ -73,11 +74,10 @@ func Run() error {
 		DB:       cfg.Redis.DB,
 		PoolSize: cfg.Redis.PoolSize,
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 启动定时任务
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if _, err = redisClient.Ping(ctx).Result(); err != nil {
-		return err
-	}
+
 	log.Println("Connected to Redis!")
 
 	// 7. Email
@@ -85,7 +85,7 @@ func Run() error {
 
 	// 8. DI
 	userRepo := repositories.NewUserRepository(db)
-	marketPriceRepo := repositories.NewMarketPriceRepository()
+	marketPriceRepo := repositories.NewMarketPriceRepository(db)
 	redisRepo := repositories.NewRedisRepository(redisClient)
 	emailService := services.NewEmailService(emailSender, redisRepo, userRepo)
 	userService := services.NewUserService(userRepo, emailService)
@@ -93,6 +93,10 @@ func Run() error {
 	userController := user.NewUserController(userService, emailService)
 	marketPriceController := market.NewMarketPriceController(marketPriceService)
 
+	marketCron := cronjobs.NewMarketPriceCron(marketPriceService)
+	if err := marketCron.Start(ctx); err != nil {
+		log.Printf("Failed to start market price cron: %v", err)
+	}
 	// 9. Router
 	r := gin.Default()
 	r.Use(middleware.RequestLogger()) // 确保 middleware 在 utils 或 internal/middleware
