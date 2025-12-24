@@ -2,8 +2,8 @@ package services
 
 import (
 	"context"
-	"liam/dto"
-	"liam/models"
+	"liam/internal/dto"
+	"liam/internal/models"
 	"liam/pkg/errors"
 	"liam/repositories"
 	"liam/utils"

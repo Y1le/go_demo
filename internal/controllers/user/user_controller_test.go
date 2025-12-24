@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"liam/dto"
+	"liam/internal/dto"
 	"liam/mocks"
 	"liam/pkg/errors"
 	"liam/utils"

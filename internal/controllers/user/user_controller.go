@@ -2,9 +2,9 @@
 package user
 
 import (
-	"liam/dto"
+	"liam/internal/dto"
+	"liam/internal/services"
 	"liam/pkg/errors"
-	"liam/services"
 	"net/http"
 	"strconv"
 

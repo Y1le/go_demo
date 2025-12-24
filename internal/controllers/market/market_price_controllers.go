@@ -1,8 +1,8 @@
 package market
 
 import (
-	"liam/dto/request"
-	"liam/services"
+	"liam/internal/dto/request"
+	"liam/internal/services"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

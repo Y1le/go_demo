@@ -1,0 +1,143 @@
+syntax = "proto3";
+
+package werewolf;
+
+option go_package = "go_demo/pkg/werewolf";
+
+// 玩家角色
+enum Role {
+  UNKNOWN = 0;
+  WEREWOLF = 1; // 狼人
+  VILLAGER = 2; // 村民
+  SEER = 3; // 预言家
+  WITCH = 4; // 女巫
+  HUNTER = 5; // 猎人
+  GUARD = 6; // 守卫
+}
+
+// 游戏状态
+enum GameState {
+  WAITING = 0; // 等待中
+  NIGHT = 1; // 黑夜
+  DAY = 2; // 白天
+  VOTING = 3; // 投票中
+  FINISHED = 4; // 游戏结束
+}
+
+// 玩家信息
+message Player {
+  string player_id = 1;
+  string name = 2;
+  Role role = 3;
+  bool is_alive = 4;
+  int32 position = 5;
+}
+
+// 创建游戏房间请求
+message CreateRoomRequest {
+  string room_name = 1;
+  int32 max_players = 2;
+  map<string, int32> role_config = 3; // 角色配置，key为角色名，value为数量
+}
+
+message CreateRoomResponse {
+  string room_id = 1;
+  string message = 2;
+}
+
+// 加入房间请求
+message JoinRoomRequest {
+  string room_id = 1;
+  string player_id = 2;
+  string player_name = 3;
+}
+
+message JoinRoomResponse {
+  bool success = 1;
+  string message = 2;
+  Player player = 3;
+}
+
+// 开始游戏请求
+message StartGameRequest {
+  string room_id = 1;
+}
+
+message StartGameResponse {
+  bool success = 1;
+  string message = 2;
+  GameState state = 3;
+}
+
+// 夜晚行动请求
+message NightActionRequest {
+  string room_id = 1;
+  string player_id = 2;
+  string target_player_id = 3;
+  string action_type = 4; // kill, check, heal, poison, guard
+}
+
+message NightActionResponse {
+  bool success = 1;
+  string message = 2;
+  string result = 3; // 预言家查验结果等
+}
+
+// 投票请求
+message VoteRequest {
+  string room_id = 1;
+  string voter_id = 2;
+  string target_id = 3;
+}
+
+message VoteResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 获取游戏状态请求
+message GetGameStateRequest {
+  string room_id = 1;
+  string player_id = 2;
+}
+
+message GetGameStateResponse {
+  string room_id = 1;
+  GameState state = 2;
+  repeated Player players = 3;
+  int32 day_count = 4;
+  string current_phase = 5;
+}
+
+// 狼人杀服务
+service WerewolfService {
+  // 创建游戏房间
+  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+  
+  // 加入房间
+  rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
+  
+  // 开始游戏
+  rpc StartGame(StartGameRequest) returns (StartGameResponse);
+  
+  // 夜晚行动
+  rpc NightAction(NightActionRequest) returns (NightActionResponse);
+  
+  // 投票
+  rpc Vote(VoteRequest) returns (VoteResponse);
+  
+  // 获取游戏状态
+  rpc GetGameState(GetGameStateRequest) returns (GetGameStateResponse);
+  
+  // 游戏事件流（服务端推送）
+  rpc SubscribeGameEvents(GetGameStateRequest) returns (stream GameEvent);
+}
+
+// 游戏事件
+message GameEvent {
+  string event_type = 1;
+  string message = 2;
+  GameState new_state = 3;
+  repeated Player affected_players = 4;
+  int64 timestamp = 5;
+}

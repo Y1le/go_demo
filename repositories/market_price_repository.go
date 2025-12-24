@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"liam/dto/response"
-	"liam/models"
+	"liam/internal/dto/response"
+	"liam/internal/models"
 	"log"
 	"net/http"
 	"net/url"
@@ -131,18 +131,35 @@ func (r *MarketPriceRepositoryImpl) CrawlAndSave() error {
 		fmt.Printf("Total records: %d, Records on this page: %d\n", data.Total, len(data.Rows))
 		var marketPrices []models.MarketPrice
 		for _, row := range data.Rows {
-			price, _ := strconv.ParseFloat(row.Price, 64)
-			date, _ := time.Parse("2006-01-02", row.PriceDate)
+			price, err := strconv.ParseFloat(row.Price, 64)
+			if err != nil {
+				log.Printf("Failed to parse price %s: %v", row.Price, err)
+				continue
+			}
+
+			date, err := time.Parse("2006-01-02", row.PriceDate)
+			if err != nil {
+				log.Printf("Failed to parse price_date %s: %v", row.PriceDate, err)
+				continue
+			}
+
 			marketPrices = append(marketPrices, models.MarketPrice{
-				ProName:    row.ProName,
-				Price:      price,
-				PriceUnit:  row.PriceUnit,
-				MarketName: row.MarketName,
-				PriceDate:  date,
-				CreateAt:   time.Now(),
+				ProID:        row.ProID,
+				ProName:      row.ProName,
+				MarketID:     row.MarketID,
+				MarketName:   row.MarketName,
+				Price:        price,
+				PriceUnit:    row.PriceUnit,
+				SpecificiVal: row.SpecificiVal, // 如果接口返回了这个字段
+				PriceDate:    date,
+				CreateAt:     time.Now(),
 			})
 		}
-		r.db.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(marketPrices, 100)
+		result := r.db.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(marketPrices, 100)
+		if result.Error != nil {
+			log.Printf("Error saving market prices: %v", result.Error)
+		}
+		log.Printf("Saved %d records", result.RowsAffected)
 		// 如果总记录数小于当前页数 * 每页大小，说明已经爬取完所有数据
 		if data.Total <= page*pageSize {
 			return nil

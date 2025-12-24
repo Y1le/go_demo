@@ -2,7 +2,7 @@ package cronjobs
 
 import (
 	"context"
-	"liam/services"
+	"liam/internal/services"
 	"log"
 	"time"
 

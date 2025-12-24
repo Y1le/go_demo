@@ -4,8 +4,11 @@ package app
 import (
 	"context"
 	"io"
-	"liam/controllers/market"
-	"liam/controllers/user"
+	"liam/internal/client"
+	"liam/internal/controllers/market"
+	"liam/internal/controllers/user"
+	werewolf "liam/internal/controllers/werewolf"
+	"liam/internal/websocket"
 	"liam/pkg/middleware"
 	"log"
 	"os"
@@ -13,12 +16,13 @@ import (
 
 	"liam/config"
 	"liam/internal/cronjobs"
+	"liam/internal/models"
 	"liam/internal/routes"
-	"liam/models"
+	"liam/internal/services"
 	"liam/repositories"
-	"liam/services"
 	"liam/utils"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"gorm.io/driver/mysql"
@@ -93,18 +97,42 @@ func Run() error {
 	userController := user.NewUserController(userService, emailService)
 	marketPriceController := market.NewMarketPriceController(marketPriceService)
 
+	marketPriceService.CrawlAndSave()
+
 	marketCron := cronjobs.NewMarketPriceCron(marketPriceService)
 	if err := marketCron.Start(ctx); err != nil {
 		log.Printf("Failed to start market price cron: %v", err)
 	}
+
+	grpcClient, err := client.NewWerewolfGRPCClient("localhost:50051")
+	if err != nil {
+		log.Fatalf("Failed to connect to gRPC server: %v", err)
+	}
+	defer grpcClient.Close()
+	werewolfService := services.NewWerewolfService(grpcClient)
+	wsHandler := websocket.NewWSHandler(grpcClient)
+	wsManager := client.NewWSManager(grpcClient)
+	werewolfController := werewolf.NewWerewolfController(werewolfService, wsManager)
+
 	// 9. Router
 	r := gin.Default()
 	r.Use(middleware.RequestLogger()) // 确保 middleware 在 utils 或 internal/middleware
+
+	// CORS 配置
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// 注册路由（移到 routes 包）
 	routes.PublicRoutes(r, userController)
 	routes.ProtectedRoutes(r, userController)
 	routes.MarketPriceRoutes(r, marketPriceController)
+	routes.WolfGameRoutes(r, werewolfController, wsHandler)
 
 	// 10. Start server
 	return r.Run(":8080") // 或从 cfg 读取端口

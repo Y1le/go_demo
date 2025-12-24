@@ -2,7 +2,7 @@ package repositories
 
 import (
 	"context"
-	"liam/models"
+	"liam/internal/models"
 	"liam/pkg/errors"
 
 	stdErr "errors"
@@ -31,7 +31,6 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 }
 
 func (r *userRepositoryImpl) CreateUser(ctx context.Context, user *models.User) error {
-	// return s.db.Create(user).Error
 	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
 		if stdErr.Is(result.Error, gorm.ErrDuplicatedKey) {
